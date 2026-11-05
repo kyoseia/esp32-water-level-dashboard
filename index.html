@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>Water Level Monitor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --ink: #182230;
+      --muted: #667085;
+      --line: #e4e9f0;
+      --blue: #1677d2;
+      --blue-soft: #e7f2ff;
+      --green: #16834a;
+      --green-soft: #e8f7ee;
+      --red: #b42318;
+      --red-soft: #fff0ef;
+      --amber: #9a6700;
+      --amber-soft: #fff6dd;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh; }
+    main { width: min(680px, calc(100% - 32px)); margin: 0 auto; padding: 44px 0 32px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+    h1 { font-size: clamp(1.4rem, 4vw, 1.85rem); margin: 0; letter-spacing: -.03em; }
+    .sub { color: var(--muted); margin: 7px 0 0; font-size: .94rem; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 8px 12px; font-size: .82rem; font-weight: 700; white-space: nowrap; background: #eef1f5; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #98a2b3; }
+    .pill.online { color: var(--green); background: var(--green-soft); }
+    .pill.online .dot { background: var(--green); }
+    .pill.offline { color: var(--red); background: var(--red-soft); }
+    .pill.offline .dot { background: var(--red); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 8px 28px rgba(16, 24, 40, .045); }
+    .level-card { display: grid; grid-template-columns: 1fr 150px; gap: 24px; align-items: center; }
+    .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-size: .72rem; font-weight: 750; }
+    .level-number { margin: 7px 0 3px; font-size: clamp(2.8rem, 10vw, 4.2rem); line-height: 1; letter-spacing: -.06em; font-weight: 780; }
+    .level-caption { color: var(--muted); margin: 0; font-size: .95rem; }
+    .tank { height: 178px; width: 116px; border: 3px solid #9db2c8; border-top: 5px solid #9db2c8; border-radius: 13px 13px 18px 18px; padding: 7px; display: flex; flex-direction: column; gap: 6px; margin: 0 auto; background: #fbfdff; }
+    .tank-segment { flex: 1; border-radius: 5px; background: #edf1f5; border: 1px solid #e2e8f0; transition: background .2s ease, border-color .2s ease; }
+    .tank-segment.active { background: #55a9ed; border-color: #278bd9; }
+    .section-title { margin: 24px 0 12px; font-size: 1rem; }
+    .probes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .probe { border: 1px solid var(--line); background: var(--card); border-radius: 13px; padding: 14px 10px; text-align: center; }
+    .probe-mark { width: 12px; height: 12px; display: block; border-radius: 50%; background: #b8c1cc; margin: 0 auto 10px; }
+    .probe.wet { border-color: #b7ddf8; background: #f4faff; }
+    .probe.wet .probe-mark { background: var(--blue); box-shadow: 0 0 0 4px var(--blue-soft); }
+    .probe-name { display: block; font-weight: 750; font-size: .87rem; }
+    .probe-state { display: block; color: var(--muted); font-size: .78rem; margin-top: 4px; }
+    .probe.wet .probe-state { color: var(--blue); font-weight: 700; }
+    .meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: .82rem; margin-top: 18px; flex-wrap: wrap; }
+    .message { display: none; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: .88rem; line-height: 1.45; }
+    .message.show { display: block; }
+    .message.warn { color: var(--amber); background: var(--amber-soft); }
+    .message.error { color: var(--red); background: var(--red-soft); }
+    footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top: 20px; }
+    @media (max-width: 520px) {
+      main { padding-top: 28px; }
+      .level-card { grid-template-columns: 1fr 112px; gap: 8px; padding: 19px; }
+      .tank { width: 92px; height: 150px; }
+      .card { padding: 18px; }
+      .probes { gap: 7px; }
+      .probe { padding: 12px 5px; }
+      .probe-name { font-size: .79rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Water Level Monitor</h1>
+        <p class="sub">ESP32 · Four-level detection</p>
+      </div>
+      <div id="device-status" class="pill"><span class="dot"></span><span>WAITING</span></div>
+    </header>
+
+    <section class="card level-card" aria-live="polite">
+      <div>
+        <div class="eyebrow">Current water level</div>
+        <div id="level-number" class="level-number">—/4</div>
+        <p id="level-caption" class="level-caption">Waiting for the first reading</p>
+      </div>
+      <div id="tank" class="tank" role="img" aria-label="Four-level tank indicator">
+        <div class="tank-segment" data-level="4"></div>
+        <div class="tank-segment" data-level="3"></div>
+        <div class="tank-segment" data-level="2"></div>
+        <div class="tank-segment" data-level="1"></div>
+      </div>
+    </section>
+
+    <h2 class="section-title">Probe status</h2>
+    <section class="probes" aria-label="Individual probe status">
+      <div class="probe" data-probe="1"><span class="probe-mark"></span><span class="probe-name">Level 1</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="2"><span class="probe-mark"></span><span class="probe-name">Level 2</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="3"><span class="probe-mark"></span><span class="probe-name">Level 3</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="4"><span class="probe-mark"></span><span class="probe-name">Level 4</span><span class="probe-state">—</span></div>
+    </section>
+
+    <div id="message" class="message"></div>
+    <div class="meta">
+      <span>Last update: <strong id="last-update">—</strong></span>
+      <span id="refresh-label">Refreshing every 20 seconds</span>
+    </div>
+    <footer>Water Level Monitor · Data provided by ThingSpeak</footer>
+  </main>
+
+  <script>
+    // Paste your new PUBLIC water-level ThingSpeak Channel ID here.
+    // The channel must be public so this page can read it without exposing a key.
+    const CHANNEL_ID = "PASTE_WATER_LEVEL_CHANNEL_ID_HERE";
+    const READ_API_KEY = ""; // Leave blank for a public channel.
+    const REFRESH_INTERVAL_MS = 20000;
+    const OFFLINE_AFTER_SECONDS = 90;
+
+    const statusEl = document.getElementById("device-status");
+    const levelNumberEl = document.getElementById("level-number");
+    const levelCaptionEl = document.getElementById("level-caption");
+    const lastUpdateEl = document.getElementById("last-update");
+    const messageEl = document.getElementById("message");
+
+    function setStatus(label, online) {
+      statusEl.className = "pill " + (online ? "online" : "offline");
+      statusEl.innerHTML = '<span class="dot"></span><span>' + label + '</span>';
+    }
+
+    function showMessage(text, type) {
+      messageEl.textContent = text;
+      messageEl.className = "message show " + type;
+    }
+
+    function clearMessage() {
+      messageEl.textContent = "";
+      messageEl.className = "message";
+    }
+
+    function renderProbes(states) {
+      states.forEach((wet, index) => {
+        const card = document.querySelector('[data-probe="' + (index + 1) + '"]');
+        card.classList.toggle("wet", wet === true);
+        card.querySelector(".probe-state").textContent = wet ? "WET" : "DRY";
+      });
+    }
+
+    function renderTank(level) {
+      document.querySelectorAll(".tank-segment").forEach(segment => {
+        const segmentLevel = Number(segment.dataset.level);
+        segment.classList.toggle("active", segmentLevel <= level);
+      });
+    }
+
+    async function refresh() {
+      if (!/^\d+$/.test(CHANNEL_ID)) {
+        setStatus("SETUP NEEDED", false);
+        showMessage("Add your ThingSpeak Channel ID in index.html, then publish the page again.", "warn");
+        return;
+      }
+
+      try {
+        let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=1`;
+        if (READ_API_KEY) url += `&api_key=${encodeURIComponent(READ_API_KEY)}`;
+
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error("ThingSpeak returned HTTP " + response.status);
+        const data = await response.json();
+        if (!data.feeds || data.feeds.length === 0) {
+          setStatus("NO DATA", false);
+          showMessage("The channel has no readings yet. Power the ESP32 and check its Serial Monitor.", "warn");
+          return;
+        }
+
+        const feed = data.feeds[data.feeds.length - 1];
+        const fields = [feed.field1, feed.field2, feed.field3, feed.field4];
+        if (fields.some(value => value === null || value === undefined || value === "")) {
+          throw new Error("The latest ThingSpeak entry is missing one or more of fields 1–4.");
+        }
+
+        const states = fields.map(value => Number(value) >= 1);
+        const highestWet = states.reduce((highest, wet, index) => wet ? index + 1 : highest, 0);
+        let contiguousLevel = 0;
+        for (let i = 0; i < states.length; i++) {
+          if (states[i]) contiguousLevel = i + 1;
+          else break;
+        }
+        const inconsistent = states.some((wet, index) => wet && index > 0 && !states[index - 1]);
+        const timestamp = new Date(feed.created_at);
+        const ageSeconds = Math.max(0, (Date.now() - timestamp.getTime()) / 1000);
+        const online = Number.isFinite(ageSeconds) && ageSeconds <= OFFLINE_AFTER_SECONDS;
+
+        renderProbes(states);
+        renderTank(inconsistent ? highestWet : contiguousLevel);
+        levelNumberEl.textContent = inconsistent ? "CHECK" : `${contiguousLevel}/4`;
+        levelCaptionEl.textContent = inconsistent
+          ? "Probe pattern is inconsistent"
+          : contiguousLevel === 0 ? "No probes are detecting water"
+          : contiguousLevel === 4 ? "Highest probe reached"
+          : `Water detected at Level ${contiguousLevel}`;
+
+        setStatus(online ? "ONLINE" : "OFFLINE", online);
+        lastUpdateEl.textContent = Number.isFinite(timestamp.getTime())
+          ? timestamp.toLocaleString()
+          : "Unknown";
+
+        if (inconsistent) {
+          showMessage("A higher probe is wet while a lower probe is dry. Check probe wiring, spacing, or contact with water.", "warn");
+        } else if (!online) {
+          showMessage("The last reading is old. The ESP32 may be powered off or disconnected from Wi-Fi.", "warn");
+        } else {
+          clearMessage();
+        }
+      } catch (error) {
+        setStatus("NO CONNECTION", false);
+        showMessage("Could not retrieve ThingSpeak data: " + error.message, "error");
+      }
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_INTERVAL_MS);
+  </script>
+</body>
+</html>
