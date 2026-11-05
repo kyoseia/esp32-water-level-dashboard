@@ -53,6 +53,12 @@
     .probe-state { display: block; color: var(--muted); font-size: .78rem; margin-top: 4px; }
     .probe.wet .probe-state { color: var(--blue); font-weight: 700; }
     .meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: .82rem; margin-top: 18px; flex-wrap: wrap; }
+    .history-card { margin-top: 18px; }
+    .history-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+    .history-heading h2 { margin: 0; font-size: 1rem; }
+    .history-heading span { color: var(--muted); font-size: .78rem; }
+    .chart-wrap { position: relative; height: 230px; width: 100%; }
+    @media (max-width: 520px) { .chart-wrap { height: 200px; } }
     .message { display: none; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: .88rem; line-height: 1.45; }
     .message.show { display: block; }
     .message.warn { color: var(--amber); background: var(--amber-soft); }
@@ -101,6 +107,16 @@
       <div class="probe" data-probe="4"><span class="probe-mark"></span><span class="probe-name">Level 4</span><span class="probe-state">—</span></div>
     </section>
 
+    <section class="card history-card">
+      <div class="history-heading">
+        <h2>Water level history</h2>
+        <span>Last 40 minutes</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="level-history" aria-label="Water level over time" role="img"></canvas>
+      </div>
+    </section>
+
     <div id="message" class="message"></div>
     <div class="meta">
       <span>Last update: <strong id="last-update">—</strong></span>
@@ -109,12 +125,16 @@
     <footer>Water Level Monitor · Data provided by ThingSpeak</footer>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     // Paste your new PUBLIC water-level ThingSpeak Channel ID here.
     // The channel must be public so this page can read it without exposing a key.
     const CHANNEL_ID = "3567261";
     const READ_API_KEY = ""; // Leave blank for a public channel.
-    const REFRESH_INTERVAL_MS = 20000;
+    // Poll twice as often as the ESP32 upload interval for a responsive dashboard.
+    const REFRESH_INTERVAL_MS = 10000;
+    const HISTORY_RESULTS = 120; // 120 readings x 20 seconds ≈ 40 minutes
+
     const OFFLINE_AFTER_SECONDS = 90;
 
     const statusEl = document.getElementById("device-status");
@@ -122,6 +142,93 @@
     const levelCaptionEl = document.getElementById("level-caption");
     const lastUpdateEl = document.getElementById("last-update");
     const messageEl = document.getElementById("message");
+    let levelChart = null;
+    let refreshInProgress = false;
+
+    function getLevel(states) {
+      let level = 0;
+      for (let i = 0; i < states.length; i++) {
+        if (states[i]) level = i + 1;
+        else break;
+      }
+      return level;
+    }
+
+    function renderHistory(feeds) {
+      const validFeeds = feeds
+        .filter(feed => [feed.field1, feed.field2, feed.field3, feed.field4]
+          .every(value => value !== null && value !== undefined && value !== ""))
+        .map(feed => {
+          const states = [feed.field1, feed.field2, feed.field3, feed.field4]
+            .map(value => Number(value) >= 1);
+          const timestamp = new Date(feed.created_at);
+          return {
+            timestamp,
+            label: timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+            level: getLevel(states)
+          };
+        })
+        .filter(point => Number.isFinite(point.timestamp.getTime()));
+
+      const labels = validFeeds.map(point => point.label);
+      const values = validFeeds.map(point => point.level);
+      const canvas = document.getElementById("level-history");
+
+      if (!levelChart) {
+        levelChart = new Chart(canvas, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              label: "Water level",
+              data: values,
+              stepped: "before",
+              borderColor: "#1677d2",
+              backgroundColor: "rgba(22,119,210,.12)",
+              fill: true,
+              borderWidth: 2,
+              pointRadius: 1.5,
+              pointHoverRadius: 4,
+              tension: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { intersect: false, mode: "index" },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: context => "Level " + context.parsed.y + " / 4"
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { maxTicksLimit: 6, maxRotation: 0, autoSkip: true, color: "#667085" }
+              },
+              y: {
+                min: 0,
+                max: 4,
+                ticks: {
+                  stepSize: 1,
+                  color: "#667085",
+                  callback: value => value === 0 ? "Empty" : "Level " + value
+                },
+                grid: { color: "#edf1f5" }
+              }
+            }
+          }
+        });
+      } else {
+        levelChart.data.labels = labels;
+        levelChart.data.datasets[0].data = values;
+        levelChart.update("none");
+      }
+    }
 
     function setStatus(label, online) {
       statusEl.className = "pill " + (online ? "online" : "offline");
@@ -161,7 +268,7 @@
       }
 
       try {
-        let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=1`;
+        let url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=${HISTORY_RESULTS}`;
         if (READ_API_KEY) url += `&api_key=${encodeURIComponent(READ_API_KEY)}`;
 
         const response = await fetch(url, { cache: "no-store" });
@@ -173,6 +280,7 @@
           return;
         }
 
+        renderHistory(data.feeds);
         const feed = data.feeds[data.feeds.length - 1];
         const fields = [feed.field1, feed.field2, feed.field3, feed.field4];
         if (fields.some(value => value === null || value === undefined || value === "")) {
@@ -215,6 +323,8 @@
       } catch (error) {
         setStatus("NO CONNECTION", false);
         showMessage("Could not retrieve ThingSpeak data: " + error.message, "error");
+      } finally {
+        refreshInProgress = false;
       }
     }
 
