@@ -120,7 +120,7 @@
     <div id="message" class="message"></div>
     <div class="meta">
       <span>Last update: <strong id="last-update">—</strong></span>
-      <span id="refresh-label">Refreshing every 20 seconds</span>
+      <span id="refresh-label">Refreshing every 10 seconds</span>
     </div>
     <footer>Water Level Monitor · Data provided by ThingSpeak</footer>
   </main>
@@ -264,7 +264,7 @@
       if (refreshInProgress) return;
       refreshInProgress = true;
 
-      if (!/^\\d+$/.test(CHANNEL_ID)) {
+      if (!/^\d+$/.test(CHANNEL_ID)) {
         setStatus("SETUP NEEDED", false);
         showMessage("Add your ThingSpeak Channel ID in index.html, then publish the page again.", "warn");
         refreshInProgress = false;
