@@ -261,9 +261,13 @@
     }
 
     async function refresh() {
-      if (!/^\d+$/.test(CHANNEL_ID)) {
+      if (refreshInProgress) return;
+      refreshInProgress = true;
+
+      if (!/^\\d+$/.test(CHANNEL_ID)) {
         setStatus("SETUP NEEDED", false);
         showMessage("Add your ThingSpeak Channel ID in index.html, then publish the page again.", "warn");
+        refreshInProgress = false;
         return;
       }
 
