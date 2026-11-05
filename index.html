@@ -88,7 +88,7 @@
     <section class="card level-card" aria-live="polite">
       <div>
         <div class="eyebrow">Current water level</div>
-        <div id="level-number" class="level-number">—/4</div>
+        <div id="level-number" class="level-number">—%</div>
         <p id="level-caption" class="level-caption">Waiting for the first reading</p>
       </div>
       <div id="tank" class="tank" role="img" aria-label="Four-level tank indicator">
@@ -101,10 +101,10 @@
 
     <h2 class="section-title">Probe status</h2>
     <section class="probes" aria-label="Individual probe status">
-      <div class="probe" data-probe="1"><span class="probe-mark"></span><span class="probe-name">Level 1</span><span class="probe-state">—</span></div>
-      <div class="probe" data-probe="2"><span class="probe-mark"></span><span class="probe-name">Level 2</span><span class="probe-state">—</span></div>
-      <div class="probe" data-probe="3"><span class="probe-mark"></span><span class="probe-name">Level 3</span><span class="probe-state">—</span></div>
-      <div class="probe" data-probe="4"><span class="probe-mark"></span><span class="probe-name">Level 4</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="1"><span class="probe-mark"></span><span class="probe-name">25%</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="2"><span class="probe-mark"></span><span class="probe-name">50%</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="3"><span class="probe-mark"></span><span class="probe-name">75%</span><span class="probe-state">—</span></div>
+      <div class="probe" data-probe="4"><span class="probe-mark"></span><span class="probe-name">100%</span><span class="probe-state">—</span></div>
     </section>
 
     <section class="card history-card">
@@ -180,7 +180,7 @@
           data: {
             labels,
             datasets: [{
-              label: "Water level",
+              label: "Water level (%)",
               data: values,
               stepped: "before",
               borderColor: "#1677d2",
@@ -201,7 +201,7 @@
               legend: { display: false },
               tooltip: {
                 callbacks: {
-                  label: context => "Level " + context.parsed.y + " / 4"
+                  label: context => "Water level: " + (context.parsed.y * 25) + "%"
                 }
               }
             },
@@ -216,7 +216,7 @@
                 ticks: {
                   stepSize: 1,
                   color: "#667085",
-                  callback: value => value === 0 ? "Empty" : "Level " + value
+                  callback: value => (value * 25) + "%"
                 },
                 grid: { color: "#edf1f5" }
               }
@@ -305,12 +305,12 @@
 
         renderProbes(states);
         renderTank(inconsistent ? highestWet : contiguousLevel);
-        levelNumberEl.textContent = inconsistent ? "CHECK" : `${contiguousLevel}/4`;
+        levelNumberEl.textContent = inconsistent ? "CHECK" : `${contiguousLevel * 25}%`;
         levelCaptionEl.textContent = inconsistent
           ? "Probe pattern is inconsistent"
           : contiguousLevel === 0 ? "No probes are detecting water"
-          : contiguousLevel === 4 ? "Highest probe reached"
-          : `Water detected at Level ${contiguousLevel}`;
+          : contiguousLevel === 4 ? "Maximum water level reached"
+          : `Water level detected at ${contiguousLevel * 25}%`;
 
         setStatus(online ? "ONLINE" : "OFFLINE", online);
         lastUpdateEl.textContent = Number.isFinite(timestamp.getTime())
